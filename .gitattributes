@@ -1,0 +1,6 @@
+# Mantener LF en el repo aunque se trabaje en Windows
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.webp binary
+*.jks binary

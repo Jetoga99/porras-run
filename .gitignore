@@ -1,0 +1,37 @@
+# Dependencias
+node_modules/
+
+# Expo / Metro
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+*.tsbuildinfo
+
+# Proyectos nativos generados por `expo prebuild` (Continuous Native Generation)
+android/
+ios/
+
+# Firmas y secretos: nunca al repositorio
+*.jks
+*.keystore
+*.p8
+*.p12
+*.mobileprovision
+.env
+.env.*
+!.env.example
+deploy/certs/
+
+# Paquetes de despliegue
+*.tar.gz
+*.zip
+
+# Sistema y editores
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/
+npm-debug.*
+coverage/
