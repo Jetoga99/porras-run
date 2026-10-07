@@ -12,6 +12,7 @@
     "web": "npm run web -w @porras/mobile",
     "android": "npm run android -w @porras/mobile",
     "export:web": "npm run export:web -w @porras/mobile",
+    "package:web": "tar -czf porras-web.tar.gz -C apps/mobile/dist .",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
