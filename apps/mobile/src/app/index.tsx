@@ -65,7 +65,7 @@ export default function LandingScreen() {
       </ThemedText>
       {STEPS.map((step, index) => (
         <Card key={step.title} style={styles.step}>
-          <ThemedText type="subtitle" themeColor="accent">
+          <ThemedText type="subtitle" themeColor="accent" style={styles.stepNumber}>
             {index + 1}
           </ThemedText>
           <View style={styles.stepText}>
@@ -99,6 +99,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.three,
+  },
+  stepNumber: {
+    width: Spacing.five,
+    textAlign: 'center',
   },
   stepText: {
     flex: 1,

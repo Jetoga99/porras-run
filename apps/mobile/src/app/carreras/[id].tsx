@@ -1,4 +1,5 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import Head from 'expo-router/head';
 import { useState } from 'react';
 import { Platform, Share, StyleSheet, View } from 'react-native';
 
@@ -72,6 +73,9 @@ export default function RaceDetailScreen() {
   return (
     <Screen withHeader>
       <Stack.Screen options={{ title: race.eventName }} />
+      <Head>
+        <title>{`${race.eventName} · PorraRun`}</title>
+      </Head>
 
       <Card>
         <ThemedText type="smallBold">{race.eventName}</ThemedText>

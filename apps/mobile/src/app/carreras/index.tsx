@@ -1,4 +1,5 @@
 import { Link } from 'expo-router';
+import Head from 'expo-router/head';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/card';
@@ -11,6 +12,9 @@ import { formatDistance, formatRaceDate } from '@/utils/format';
 export default function RacesScreen() {
   return (
     <Screen withHeader>
+      <Head>
+        <title>Mis carreras · PorraRun</title>
+      </Head>
       <ThemedText type="subtitle">Hola, {RUNNER_NAME}</ThemedText>
       <ThemedText themeColor="textSecondary">
         Toca una carrera para ver tus porras y compartir su link.
