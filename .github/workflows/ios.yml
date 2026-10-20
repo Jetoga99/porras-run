@@ -1,0 +1,133 @@
+# Compilación iOS con Xcode en un runner macOS de GitHub (Reto 5).
+# Sin cuenta de Apple Developer no se puede firmar para distribución, así que el flujo:
+#   1. compila para el simulador (prueba de que no hay errores),
+#   2. archiva para dispositivo sin firma y empaqueta el .ipa,
+#   3. aplica una firma ad hoc para demostrar el paso de firmado,
+#   4. toma capturas reales en simuladores de iPhone y iPad y graba un video corto
+#      de vista previa (App Preview) en el iPhone.
+name: iOS (Xcode)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  ios:
+    name: Build, .ipa y capturas
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://porras.local/api' }}
+      WORKSPACE: apps/mobile/ios/PorraRun.xcworkspace
+      SCHEME: PorraRun
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Seleccionar Xcode 26 (requisito de App Store desde abril de 2026)
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+          mkdir -p build
+          xcodebuild -version | tee build/xcode-version.txt
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar el proyecto nativo (expo prebuild + CocoaPods)
+        working-directory: apps/mobile
+        run: npx expo prebuild -p ios --clean
+
+      - name: Configuración del proyecto (Bundle ID, versión, SDK)
+        run: |
+          set -o pipefail
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -showBuildSettings \
+            | grep -E " (PRODUCT_BUNDLE_IDENTIFIER|MARKETING_VERSION|CURRENT_PROJECT_VERSION|IPHONEOS_DEPLOYMENT_TARGET|SDK_VERSION|PRODUCT_NAME) =" \
+            | sort -u | tee build/build-settings.txt
+
+      - name: Compilar para el simulador (sin errores = listo para archivar)
+        run: |
+          set -o pipefail
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build/sim CODE_SIGNING_ALLOWED=NO build | tail -n 25
+
+      - name: Archivar para dispositivo (sin firma de distribución)
+        run: |
+          set -o pipefail
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath build/PorraRun.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" archive | tail -n 25
+
+      - name: Empaquetar el .ipa y firmarlo ad hoc
+        run: |
+          set -o pipefail
+          mkdir -p build/ipa/Payload
+          cp -R build/PorraRun.xcarchive/Products/Applications/PorraRun.app build/ipa/Payload/
+          (cd build/ipa && zip -qry ../PorraRun-sin-firma.ipa Payload)
+          # Firma ad hoc ("-"): demuestra el firmado sin certificado de Apple. No sirve para la App Store.
+          codesign --force --deep --sign - build/ipa/Payload/PorraRun.app
+          codesign -dv --verbose=2 build/ipa/Payload/PorraRun.app 2>&1 | tee build/codesign.txt
+          (cd build/ipa && zip -qry ../PorraRun-adhoc.ipa Payload)
+          ls -lh build/*.ipa | tee -a build/codesign.txt
+
+      - name: Capturas en simuladores de iPhone y iPad
+        run: |
+          set -euo pipefail
+          APP=$(find build/sim -type d -name 'PorraRun.app' -path '*Release-iphonesimulator*' | head -1)
+          mkdir -p build/capturas
+          pick() {
+            xcrun simctl list devices available -j | python3 -c "
+          import json, sys
+          want = sys.argv[1:]
+          devices = [d for runtime, ds in json.load(sys.stdin)['devices'].items() if 'iOS' in runtime for d in ds]
+          for w in want:
+              match = [d for d in devices if w in d['name']]
+              if match:
+                  print(match[-1]['udid']); break
+          " "$@"
+          }
+          capture() {
+            local label="$1"; shift
+            local udid; udid=$(pick "$@")
+            local rec_pid=""
+            xcrun simctl boot "$udid" || true
+            xcrun simctl bootstatus "$udid" -b
+            xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 || true
+            xcrun simctl install "$udid" "$APP"
+            if [ "$label" = "iphone" ]; then
+              # Video de vista previa: recorrido inicio -> privacidad -> registro (~40 s, se recorta después).
+              xcrun simctl io "$udid" recordVideo --codec=h264 --force "build/capturas/${label}-vista-previa.mp4" &
+              rec_pid=$!
+              sleep 3
+            fi
+            xcrun simctl launch "$udid" mx.jesustorres.porrarun
+            sleep 20
+            xcrun simctl io "$udid" screenshot "build/capturas/${label}-inicio.png"
+            xcrun simctl openurl "$udid" "porrarun:///privacidad"
+            sleep 8
+            xcrun simctl io "$udid" screenshot "build/capturas/${label}-privacidad.png"
+            xcrun simctl openurl "$udid" "porrarun:///registro"
+            sleep 8
+            xcrun simctl io "$udid" screenshot "build/capturas/${label}-registro.png"
+            if [ -n "$rec_pid" ]; then kill -INT "$rec_pid"; wait "$rec_pid" || true; fi
+            xcrun simctl shutdown "$udid"
+          }
+          capture iphone "Pro Max" "iPhone"
+          capture ipad "iPad Pro 13" "iPad Pro" "iPad"
+          ls -lh build/capturas
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: porrarun-ios-${{ github.ref_name }}
+          retention-days: 30
+          path: |
+            build/*.ipa
+            build/*.txt
+            build/capturas

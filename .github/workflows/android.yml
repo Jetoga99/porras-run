@@ -1,0 +1,83 @@
+# AAB para Google Play (Reto 4).
+# Se ejecuta a mano (pestaña Actions > "Android (AAB)" > Run workflow) o al subir una etiqueta v*.
+# Firma: si existen los secretos ANDROID_UPLOAD_*, el AAB se firma con la upload key;
+# si no, con la llave de depuración (sirve para probar, no para subir a la tienda).
+name: Android (AAB)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  aab:
+    name: AAB firmado y APK de prueba
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      # API que usará la app instalada (variable del repositorio; opcional).
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://porras.local/api' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Generar el proyecto nativo (expo prebuild)
+        working-directory: apps/mobile
+        run: npx expo prebuild -p android --clean --no-install
+
+      - name: Preparar la llave de firma
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_UPLOAD_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_UPLOAD_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_UPLOAD_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/porrarun-upload.jks"
+            {
+              echo "ORG_GRADLE_PROJECT_PORRAS_UPLOAD_STORE_FILE=$RUNNER_TEMP/porrarun-upload.jks"
+              echo "ORG_GRADLE_PROJECT_PORRAS_UPLOAD_STORE_PASSWORD=$STORE_PASSWORD"
+              echo "ORG_GRADLE_PROJECT_PORRAS_UPLOAD_KEY_ALIAS=$KEY_ALIAS"
+              echo "ORG_GRADLE_PROJECT_PORRAS_UPLOAD_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "Se firmará con la upload key de PorraRun."
+          else
+            echo "::warning::No hay secretos de firma: el AAB se firma con la llave de depuración."
+          fi
+
+      - name: Compilar AAB (Play) y APK (pruebas)
+        working-directory: apps/mobile/android
+        run: ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
+
+      - name: Verificar firma y contenido
+        working-directory: apps/mobile/android/app/build/outputs
+        run: |
+          set -o pipefail
+          ls -lh bundle/release/app-release.aab apk/release/app-release.apk | tee ../../../../verificacion.txt
+          echo "--- Certificado del AAB ---" | tee -a ../../../../verificacion.txt
+          keytool -printcert -jarfile bundle/release/app-release.aab | head -n 12 | tee -a ../../../../verificacion.txt
+          echo "--- Firma del APK ---" | tee -a ../../../../verificacion.txt
+          "$ANDROID_HOME"/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner verify --print-certs apk/release/app-release.apk | tee -a ../../../../verificacion.txt
+          echo "--- Paquete, versión y SDK ---" | tee -a ../../../../verificacion.txt
+          "$ANDROID_HOME"/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/aapt2 dump badging apk/release/app-release.apk | grep -E "^package|sdkVersion|targetSdkVersion|uses-permission" | tee -a ../../../../verificacion.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: porrarun-android-${{ github.ref_name }}
+          retention-days: 30
+          path: |
+            apps/mobile/android/app/build/outputs/bundle/release/app-release.aab
+            apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+            apps/mobile/verificacion.txt
