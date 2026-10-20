@@ -93,35 +93,59 @@ jobs:
                   print(match[-1]['udid']); break
           " "$@"
           }
+          BUNDLE=mx.jesustorres.porrarun
+          running() { xcrun simctl spawn "$1" launchctl list 2>/dev/null | grep -q "$BUNDLE"; }
+          shot() {
+            local udid="$1" name="$2"
+            # Si la app se cerró, se registra y se vuelve a abrir para que la captura sea de la app.
+            if ! running "$udid"; then
+              echo "::warning::PorraRun no estaba en ejecución antes de ${name}; se vuelve a abrir"
+              xcrun simctl launch "$udid" "$BUNDLE" || true
+              sleep 10
+            fi
+            xcrun simctl io "$udid" screenshot "build/capturas/${name}.png"
+          }
           capture() {
             local label="$1"; shift
             local udid; udid=$(pick "$@")
             local rec_pid=""
-            xcrun simctl boot "$udid" || true
+            xcrun simctl shutdown "$udid" 2>/dev/null || true
+            # Aprueba de antemano el esquema porrarun:// para que "simctl openurl" no muestre
+            # el diálogo "Open in PorraRun?" (se escribe con el simulador apagado).
+            PREFS="$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Library/Preferences"
+            mkdir -p "$PREFS"
+            /usr/libexec/PlistBuddy -c "Add :com.apple.CoreSimulator.CoreSimulatorBridge-->porrarun string $BUNDLE" \
+              "$PREFS/com.apple.launchservices.schemeapproval.plist" || true
+            xcrun simctl boot "$udid"
             xcrun simctl bootstatus "$udid" -b
             xcrun simctl status_bar "$udid" override --time 9:41 --batteryState charged --batteryLevel 100 || true
             xcrun simctl install "$udid" "$APP"
             if [ "$label" = "iphone" ]; then
-              # Video de vista previa: recorrido inicio -> privacidad -> registro (~40 s, se recorta después).
+              # Video de vista previa: inicio -> privacidad -> registro (se recorta a 15-30 s).
               xcrun simctl io "$udid" recordVideo --codec=h264 --force "build/capturas/${label}-vista-previa.mp4" &
               rec_pid=$!
               sleep 3
             fi
-            xcrun simctl launch "$udid" mx.jesustorres.porrarun
+            xcrun simctl launch "$udid" "$BUNDLE"
             sleep 20
-            xcrun simctl io "$udid" screenshot "build/capturas/${label}-inicio.png"
+            shot "$udid" "${label}-inicio"
             xcrun simctl openurl "$udid" "porrarun:///privacidad"
             sleep 8
-            xcrun simctl io "$udid" screenshot "build/capturas/${label}-privacidad.png"
+            shot "$udid" "${label}-privacidad"
             xcrun simctl openurl "$udid" "porrarun:///registro"
             sleep 8
-            xcrun simctl io "$udid" screenshot "build/capturas/${label}-registro.png"
+            shot "$udid" "${label}-registro"
             if [ -n "$rec_pid" ]; then kill -INT "$rec_pid"; wait "$rec_pid" || true; fi
+            # Diagnóstico: registro de la app y reportes de fallo, si los hubo.
+            xcrun simctl spawn "$udid" log show --last 5m --style compact \
+              --predicate 'process == "PorraRun"' > "build/capturas/${label}-log.txt" 2>&1 || true
             xcrun simctl shutdown "$udid"
           }
           capture iphone "Pro Max" "iPhone"
           capture ipad "iPad Pro 13" "iPad Pro" "iPad"
-          ls -lh build/capturas
+          mkdir -p build/capturas/fallos
+          cp ~/Library/Logs/DiagnosticReports/PorraRun* build/capturas/fallos/ 2>/dev/null || true
+          ls -lhR build/capturas
 
       - uses: actions/upload-artifact@v4
         with:
