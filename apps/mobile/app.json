@@ -37,7 +37,12 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "headOrigin": "https://porras.local"
+        }
+      ],
       [
         "expo-splash-screen",
         {
