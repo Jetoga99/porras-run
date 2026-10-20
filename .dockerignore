@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.expo
+.git
+apps/mobile/android
+apps/mobile/ios
+deploy/certs
+*.tar.gz
+.env

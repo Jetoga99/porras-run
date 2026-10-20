@@ -18,6 +18,10 @@ ios/
 *.p8
 *.p12
 *.mobileprovision
+*.aab
+*.apk
+*.ipa
+upload-base64.txt
 .env
 .env.*
 !.env.example
@@ -35,3 +39,7 @@ Thumbs.db
 .idea/
 npm-debug.*
 coverage/
+
+# Reportes de Playwright
+playwright-report/
+test-results/

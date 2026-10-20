@@ -7,7 +7,10 @@ import { Card } from '@/components/card';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
-import { RACES } from '@/data/mock';
+import { useSession } from '@/lib/session';
+
+/** Carrera de demostración incluida en db/02-seed.sql. */
+const DEMO_SLUG = 'medio-gto-k7f2';
 
 const STEPS = [
   {
@@ -26,7 +29,7 @@ const STEPS = [
 
 export default function LandingScreen() {
   const router = useRouter();
-  const demoRace = RACES[0];
+  const { token } = useSession();
 
   return (
     <Screen>
@@ -52,11 +55,22 @@ export default function LandingScreen() {
       </View>
 
       <View style={styles.actions}>
-        <Button label="Ver mis carreras" onPress={() => router.push('/carreras')} />
+        {token ? (
+          <Button label="Ver mis carreras" onPress={() => router.push('/carreras')} />
+        ) : (
+          <>
+            <Button label="Crear mi cuenta" onPress={() => router.push('/registro')} />
+            <Button
+              label="Ya tengo cuenta"
+              variant="secondary"
+              onPress={() => router.push('/login')}
+            />
+          </>
+        )}
         <Button
           label="Probar el link de un amigo"
           variant="secondary"
-          onPress={() => router.push(`/c/${demoRace.shareSlug}`)}
+          onPress={() => router.push(`/c/${DEMO_SLUG}`)}
         />
       </View>
 
@@ -76,10 +90,6 @@ export default function LandingScreen() {
           </View>
         </Card>
       ))}
-
-      <ThemedText type="small" themeColor="textSecondary" style={styles.center}>
-        Versión de demostración con datos de prueba.
-      </ThemedText>
     </Screen>
   );
 }

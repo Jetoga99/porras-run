@@ -1,6 +1,6 @@
 {
   "name": "porras-run",
-  "version": "0.0.0",
+  "version": "0.2.0",
   "private": true,
   "description": "PorraRun: mensajes de ánimo para corredores (web, Android e iOS)",
   "workspaces": [
@@ -13,12 +13,16 @@
     "android": "npm run android -w @porras/mobile",
     "export:web": "npm run export:web -w @porras/mobile",
     "package:web": "tar -czf porras-web.tar.gz -C apps/mobile/dist .",
+    "api:dev": "npm run dev -w @porras/api",
+    "test:api": "npm run test -w @porras/api",
+    "test:e2e": "playwright test",
     "lint": "npm run lint --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "prettier": "^3.6.0"
   },
   "engines": {

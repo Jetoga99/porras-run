@@ -5,3 +5,5 @@ android
 ios
 package-lock.json
 apps/mobile/assets
+playwright-report
+test-results

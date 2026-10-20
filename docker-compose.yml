@@ -1,15 +1,67 @@
-# Servidor local de PorraRun. Uso:
+# Stack local de PorraRun: PostgreSQL + API Express + Nginx con HTTPS.
+# Antes del primer arranque sigue INSTALL.md (archivo .env, certificado y archivo hosts).
 #   npm run export:web
-#   docker compose up -d
-# y abrir http://localhost/porras
+#   docker compose up -d --build
+# y abre https://porras.local
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: porras-db
+    environment:
+      POSTGRES_DB: porras
+      POSTGRES_USER: porras
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-porras_local}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Esquema y datos demo: se ejecutan solo la primera vez (volumen vacío).
+      - ./db:/docker-entrypoint-initdb.d:ro
+    ports:
+      # Solo desde esta PC (psql, cliente gráfico, pruebas). Se usa 5433 para no chocar
+      # con un PostgreSQL instalado en Windows ni con puertos reservados por Hyper-V/WSL.
+      - '127.0.0.1:${PORRAS_DB_PORT:-5433}:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U porras -d porras']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: porras-api
+    environment:
+      DATABASE_URL: postgres://porras:${POSTGRES_PASSWORD:-porras_local}@db:5432/porras
+      JWT_SECRET: ${JWT_SECRET:?Define JWT_SECRET en el archivo .env}
+      IP_HASH_SALT: ${IP_HASH_SALT:?Define IP_HASH_SALT en el archivo .env}
+      # Servidor de desarrollo de Expo (npm run web).
+      CORS_ORIGINS: http://localhost:8081
+      # Confía en Nginx para leer la IP real del visitante.
+      TRUST_PROXY: 1
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Para la app en desarrollo (emulador o teléfono); en producción solo Nginx la alcanza.
+      - '3000:3000'
+    restart: unless-stopped
+
   web:
     image: nginx:1.29-alpine
     container_name: porras-web
     ports:
-      # Si el puerto 80 está ocupado: $env:PORRAS_HTTP_PORT=8080; docker compose up -d
       - '${PORRAS_HTTP_PORT:-80}:80'
+      - '${PORRAS_HTTPS_PORT:-443}:443'
     volumes:
       - ./apps/mobile/dist:/usr/share/nginx/html/porras:ro
       - ./deploy/nginx/porras.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/nginx/snippets:/etc/nginx/snippets:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  pgdata:

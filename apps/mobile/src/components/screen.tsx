@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LegalFooter } from '@/components/legal-footer';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 
@@ -9,10 +10,12 @@ type ScreenProps = {
   children: ReactNode;
   /** Pantallas con header de navegación: el header ya respeta el área segura superior. */
   withHeader?: boolean;
+  /** Pie con los enlaces legales (activo por defecto). */
+  footer?: boolean;
 };
 
 /** Contenedor común: fondo del tema, scroll y ancho máximo legible en pantallas grandes. */
-export function Screen({ children, withHeader = false }: ScreenProps) {
+export function Screen({ children, withHeader = false, footer = true }: ScreenProps) {
   return (
     <ThemedView style={styles.fill}>
       <SafeAreaView style={styles.fill} edges={withHeader ? ['bottom'] : undefined}>
@@ -21,7 +24,10 @@ export function Screen({ children, withHeader = false }: ScreenProps) {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <ThemedView style={styles.content}>{children}</ThemedView>
+          <ThemedView style={styles.content}>
+            {children}
+            {footer && <LegalFooter />}
+          </ThemedView>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
